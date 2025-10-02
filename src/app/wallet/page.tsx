@@ -3,9 +3,10 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
-import { getContract } from "thirdweb";
-import { balanceOf } from "thirdweb/extensions/erc20";
-import { polygon } from "thirdweb/chains";
+// (온체인 잔액은 미사용이므로 필요 없으면 아래 import 3개는 제거해도 됩니다.)
+// import { getContract } from "thirdweb";
+// import { balanceOf } from "thirdweb/extensions/erc20";
+// import { polygon } from "thirdweb/chains";
 
 import BottomNav from "@/components/BottomNav";
 import PassPurchaseModal from "@/components/PassPurchaseModal";
@@ -24,8 +25,7 @@ const trunc2 = (v: number) => (v >= 0 ? Math.floor(v * 100) / 100 : Math.ceil(v 
 const fmt2 = (v: number) =>
   trunc2(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-type RTStatus = "pending" | "sent" | "failed" | "success";
-type RewardRow = { total_amount: number | null; status: RTStatus };
+type RTStatus = "pending" | "sent" | "failed" | "success" | "completed";
 
 export default function HomePage() {
   const account = useActiveAccount();
@@ -48,15 +48,16 @@ export default function HomePage() {
     [totalInvestUSDT]
   );
 
-  // 원금 상환(계산 뷰 기반)
+  // 상환 관련
   const [repayLoading, setRepayLoading] = useState(false);
-  const [todayAmount, setTodayAmount] = useState(0);              // 오늘 상환 실제(보내준 금액)
+  const [todayAmount, setTodayAmount] = useState(0);          // 오늘 원금 상환 (payout_transfers.today_repay 합계)
   const [todayStatus, setTodayStatus] = useState<"unpaid"|"paid">("unpaid");
-  const [todayPlanned, setTodayPlanned] = useState(0);            // 일일 상환 예정(뷰)
-  const [deductedCumUSDT, setDeductedCumUSDT] = useState(0);      // 누적 상환(뷰)
-  const [remainingUSDT, setRemainingUSDT] = useState(0);          // 잔여 원금(뷰)
+  const [todayPlanned, setTodayPlanned] = useState(0);        // (참고) 계산뷰 예정액
+  const [deductedCumUSDT, setDeductedCumUSDT] = useState(0);  // 누적 원금 상환 (payout_transfers.today_repay 합계)
+  const [remainingUSDT, setRemainingUSDT] = useState(0);      // (참고) 계산뷰 잔여
+  const [remainingFromTable, setRemainingFromTable] = useState(0); // 잔여 원금(테이블 합계)
 
-  // ⬇️ 표시용 잔여(미상환이면 오늘 예정액을 되돌려서 표시)
+  // 표시용(기존 로직 유지 – 참고)
   const displayedRemainingUSDT = useMemo(() => {
     const v = todayStatus === "paid" ? remainingUSDT : (remainingUSDT + todayPlanned);
     return trunc2(v);
@@ -69,10 +70,11 @@ export default function HomePage() {
 
   const [todayDateKST, setTodayDateKST] = useState("");
 
-  const usdtContract = useMemo(
-    () => getContract({ client, chain: polygon, address: USDT_ADDRESS }),
-    []
-  );
+  // (온체인 잔액 미사용: 필요 시 복원)
+  // const usdtContract = useMemo(
+  //   () => getContract({ client, chain: polygon, address: USDT_ADDRESS }),
+  //   []
+  // );
 
   useEffect(() => {
     if (!account?.address) router.replace("/");
@@ -85,16 +87,21 @@ export default function HomePage() {
   useEffect(() => {
     if (account?.address && !balanceCalled.current) {
       balanceCalled.current = true;
-      fetchUSDTBalance();
+      // 유저 로드 → ref_code 로 카드 데이터 로드
       loadUser(account.address.toLowerCase());
     }
   }, [account?.address]);
 
   useEffect(() => {
     if (!refCode) return;
+
     fetchTotalInvestments(refCode);
-    fetchRepaymentSummary(refCode);         // 누적/잔여/예정치
-    fetchTodayMoney(refCode);               // 오늘 지급 여부/금액
+    fetchRepaymentSummary(refCode);           // (참고) 계산뷰
+    fetchTodayMoneyFromPayouts(refCode);      // 오늘 원금 상환
+    fetchCumulativeRepayFromPayouts(refCode); // 누적 원금 상환
+    fetchRemainingFromRepayments(refCode);    // 잔여 원금
+    fetchVirtualBalance(refCode);             // ✅ 보유자산 = asset_ledger 합계
+
     const ch = supabase
       .channel("investments_realtime_sum")
       .on(
@@ -103,16 +110,28 @@ export default function HomePage() {
         () => {
           fetchTotalInvestments(refCode);
           fetchRepaymentSummary(refCode);
+          fetchRemainingFromRepayments(refCode);
+          fetchVirtualBalance(refCode);
         }
       )
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [refCode]);
 
-  async function fetchUSDTBalance() {
+  // ✅ 보유 자산(가상) = asset_ledger 합계
+  async function fetchVirtualBalance(rc: string) {
     try {
-      const result = await balanceOf({ contract: usdtContract, address: account!.address! });
-      setUsdtBalance(fmt2(Number(result) / 1e6));
+      const { data, error } = await supabase
+        .from("asset_ledger")
+        .select("amount")
+        .eq("ref_code", rc);
+      if (error) throw error;
+
+      const sum = (data ?? []).reduce(
+        (acc: number, r: any) => acc + Number(r?.amount ?? 0),
+        0
+      );
+      setUsdtBalance(fmt2(sum)); // 소수 2자리 + 천단위
     } catch {
       setUsdtBalance("0.00");
     }
@@ -135,7 +154,7 @@ export default function HomePage() {
         .select("invest_amount_usdt")
         .eq("ref_code", rc);
       if (error) throw error;
-      const usdt = (data ?? []).reduce((s: number, r: any) => s + Number(r.invest_amount_usdt ?? 0), 0);
+      const usdt = (data ?? []).reduce((s: number, r: any) => s + Number(r?.invest_amount_usdt ?? 0), 0);
       setTotalInvestUSDT(usdt);
     } catch {
       setTotalInvestUSDT(0);
@@ -144,7 +163,7 @@ export default function HomePage() {
     }
   }
 
-  // 계산 뷰에서 누적/잔여/일일예정 가져오기
+  // (참고) 계산뷰
   async function fetchRepaymentSummary(rc: string) {
     setRepayLoading(true);
     try {
@@ -155,9 +174,9 @@ export default function HomePage() {
       if (error) throw error;
 
       const arr = (data ?? []) as any[];
-      const planned   = arr.reduce((s, r) => s + Number(r.today_amount_usdt ?? 0), 0);
-      const deducted  = arr.reduce((s, r) => s + Number(r.deducted_cum_usdt ?? 0), 0);
-      const remaining = arr.reduce((s, r) => s + Number(r.remaining_usdt ?? 0), 0);
+      const planned   = arr.reduce((s, r) => s + Number(r?.today_amount_usdt ?? 0), 0);
+      const deducted  = arr.reduce((s, r) => s + Number(r?.deducted_cum_usdt ?? 0), 0);
+      const remaining = arr.reduce((s, r) => s + Number(r?.remaining_usdt ?? 0), 0);
 
       setTodayPlanned(planned);
       setDeductedCumUSDT(deducted);
@@ -171,36 +190,97 @@ export default function HomePage() {
     }
   }
 
-  // 오늘 실제 지급/상태 (reward_transfers)
-  async function fetchTodayMoney(rc: string) {
+  // ▶ 오늘 원금 상환: payout_transfers에서 오늘 날짜의 today_repay 합계
+  async function fetchTodayMoneyFromPayouts(rc: string) {
     try {
       const today = getKSTISOString().slice(0, 10);
-      const { data } = await supabase
-        .from("reward_transfers")
-        .select("total_amount, status")
+      const { data, error } = await supabase
+        .from("payout_transfers")
+        .select("today_repay,status")
         .eq("ref_code", rc)
-        .eq("reward_date", today);
-      const rows = (data ?? []) as RewardRow[];
-      const total = rows.reduce((s, r) => s + (r.total_amount ?? 0), 0);
-      setTodayAmount(total);
-      setTodayStatus(
-        rows.some((r) => r.status === "sent" || r.status === "success") ? "paid" : "unpaid"
-      );
+        .eq("transfer_date", today);
+      if (error) throw error;
+
+      const rows = (data ?? []) as any[];
+      const principalSum = rows.reduce((s: number, r: any) => s + Number(r?.today_repay ?? 0), 0);
+      setTodayAmount(principalSum);
+
+      const paid = rows.some((r: any) => {
+        const st = String(r?.status ?? "").toLowerCase();
+        return st === "sent" || st === "success" || st === "completed";
+      });
+      setTodayStatus(paid ? "paid" : "unpaid");
     } catch {
       setTodayAmount(0);
       setTodayStatus("unpaid");
     }
   }
 
+  // ▶ 누적 원금 상환: payout_transfers에서 today_repay 누적 합계
+  async function fetchCumulativeRepayFromPayouts(rc: string) {
+    try {
+      const { data, error } = await supabase
+        .from("payout_transfers")
+        .select("today_repay,status,ref_code")
+        .eq("ref_code", rc);
+      if (error) throw error;
+
+      const rows = (data ?? []) as any[];
+
+      // 완료 건 우선 합계(없으면 전체 폴백)
+      let done = rows.filter((r: any) => {
+        const st = String(r?.status ?? "").toLowerCase();
+        return st === "sent" || st === "success" || st === "completed";
+      });
+      if (!done.length) done = rows;
+
+      const cum = done.reduce((s: number, r: any) => s + Number(r?.today_repay ?? 0), 0);
+      setDeductedCumUSDT(cum);
+    } catch {
+      setDeductedCumUSDT(0);
+    }
+  }
+
+  // ▶ 잔여 원금: repayments 테이블의 principal_remaining 합계(상태=active 우선, 없으면 전체)
+  async function fetchRemainingFromRepayments(rc: string) {
+    if (!rc) {
+      setRemainingFromTable(0);
+      return;
+    }
+    try {
+      const { data, error } = await supabase
+        .from("repayments")
+        .select("principal_remaining,status")
+        .eq("ref_code", rc);
+      if (error) throw error;
+
+      const rows = (data ?? []) as any[];
+      const norm = rows.map((r) => ({
+        status: String(r?.status ?? "").toLowerCase().trim(),
+        remaining: Number(r?.principal_remaining ?? 0),
+      }));
+
+      const active = norm.filter((r) => r.status === "active");
+      let sum = active.reduce((s, r) => s + (isFinite(r.remaining) ? r.remaining : 0), 0);
+      if (!active.length || sum === 0) {
+        sum = norm.reduce((s, r) => s + (isFinite(r.remaining) ? r.remaining : 0), 0);
+      }
+      setRemainingFromTable(sum);
+    } catch {
+      setRemainingFromTable(0);
+    }
+  }
+
   const goSwap = () => {
-    const raw = parseFloat(usdtBalance.replace(/,/g, "")) || 0;
+    const raw = parseFloat(usdtBalance.replace(/,/g, "")) || 0; // fmt2 콤마 제거 후 숫자 변환
     if (typeof window !== "undefined") sessionStorage.setItem("usdt_balance", String(raw));
     router.push(`/home/swap?usdt=${raw}`);
   };
 
+  // ▶ 상세보기: 원금 상환 이력 페이지로 이동
   const handleDetailClick = () => {
     if (!refCode) { alert("내 초대코드를 찾을 수 없어요."); return; }
-    router.push(`/rewards/transfers?range=30d&ref=${refCode}`);
+    router.push(`/harumoney/repayments?ref=${refCode}`);
   };
 
   const handleFundingClick = () => {
@@ -256,7 +336,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* 잔여 원금 (표시용: 미상환이면 오늘 예정액을 되돌려서 표시) */}
+      {/* 잔여 원금 (repayments 합계) */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
         <div className="rounded-2xl bg-white shadow p-4">
           <div className="flex items-start justify-between">
@@ -267,17 +347,19 @@ export default function HomePage() {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-extrabold tracking-tight">{fmt2(displayedRemainingUSDT)}</span>
+              <span className="text-2xl font-extrabold tracking-tight">{fmt2(remainingFromTable)}</span>
               <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
             </div>
             <div>
-              <span className="text-2xl font-extrabold tracking-tight text-gray-800">₩ {displayedRemainingKRW.toLocaleString()}</span>
+              <span className="text-2xl font-extrabold tracking-tight text-gray-800">
+                ₩ {(Math.trunc(remainingFromTable * KRW_PER_USDT)).toLocaleString()}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 오늘의 원금 상환 + 누적 상환 표시 */}
+      {/* 오늘의 원금 상환 + 누적 상환 */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
         <div className="rounded-2xl bg-white shadow p-4">
           <div className="flex items-start justify-between">
@@ -285,24 +367,16 @@ export default function HomePage() {
               <p className="text-sm font-semibold text-gray-800">오늘의 원금 상환</p>
               <p className="text-xs text-gray-500 mt-0.5">매일 10:00 KST 전</p>
             </div>
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                todayStatus === "paid" ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {todayStatus === "paid" ? "상환 완료" : "미상환"}
-            </span>
+            <div /> {/* 상태 배지 미표시 */}
           </div>
 
-          {/* 오늘 실제 상환 / 일일 예정 / 누적 상환 */}
           <div className="mt-3">
-            <div className="flex items-baseline justify-between">
+            <div className="flex items-baseline justify_between">
               <div>
                 <span className="text-2xl font-extrabold tracking-tight">{fmt2(todayAmount)}</span>
                 <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
               </div>
-              <div className="text-sm font-semibold text-gray-600">
-              </div>
+              <div className="text-sm font-semibold text-gray-600"></div>
             </div>
 
             <div className="mt-2 text-xs text-gray-500 text-right">
@@ -326,10 +400,18 @@ export default function HomePage() {
             {usdtBalance} <span className="text-lg font-semibold">USDT</span>
           </div>
           <div className="flex justify-between text-sm font-semibold gap-2">
-            <button type="button" onClick={handleFundingClick} className="flex-1 bg-white text-cyan-700 rounded-full px-4 py-2 shadow-md border border-cyan-200 font-bold">
+            <button
+              type="button"
+              onClick={handleFundingClick}
+              className="flex-1 bg-white text-cyan-700 rounded-full px-4 py-2 shadow-md border border-cyan-200 font-bold"
+            >
               보충
             </button>
-            <button type="button" onClick={() => goSwap()} className="flex-1 bg-white text-cyan-600 rounded-full px-4 py-2 shadow-md border border-cyan-200">
+            <button
+              type="button"
+              onClick={goSwap}
+              className="flex-1 bg-white text-cyan-600 rounded-full px-4 py-2 shadow-md border border-cyan-200"
+            >
               현금교환
             </button>
           </div>
@@ -346,7 +428,10 @@ export default function HomePage() {
             if (refCode) {
               fetchTotalInvestments(refCode);
               fetchRepaymentSummary(refCode);
-              fetchTodayMoney(refCode);
+              fetchTodayMoneyFromPayouts(refCode);
+              fetchCumulativeRepayFromPayouts(refCode);
+              fetchRemainingFromRepayments(refCode);
+              fetchVirtualBalance(refCode);
             }
           }}
         />

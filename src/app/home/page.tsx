@@ -9,7 +9,7 @@ import { polygon } from 'thirdweb/chains';
 
 import AdBanner from '@/components/AdBanner';
 import BottomNav from '@/components/BottomNav';
-import TodayMoneyCard from '@/components/TodayMoneyCard';
+// import TodayMoneyCard from '@/components/TodayMoneyCard'; // ⛔️ 삭제: prop 불일치로 인한 에러 방지
 import { client } from '@/lib/client';
 import { supabase } from '@/lib/supabaseClient';
 import { getKSTISOString } from '@/lib/dateUtil';
@@ -203,25 +203,58 @@ export default function WalletPage() {
     router.push(`/home/swap?usdt=${raw}`);
   };
 
+  // 큰 숫자 표시: 오늘 송금액이 있으면 그 값을, 없으면 일일 리워드를 표기
+  const bigNumber = todayAmount > 0 ? todayAmount : todayDailyReward;
+
   return (
     <div className="min-h-screen bg-[#f5f7fa] pb-28">
-      {/* 상단바 */}
-
       {/* COINW 홍보 배너 */}
       <div className="px-0 mt-2">
         <AdBanner />
       </div>
 
       <div className="px-4 mt-4 space-y-6">
-        {/* 오늘의 머니 카드박스 */}
-        <TodayMoneyCard
-          dateKST={todayDateKST}
-          scheduleText="매일 10:00 KST 전"
-          amount={todayAmount}                 // fallback
-          dailyRewardUSDT={todayDailyReward}   // 큰 숫자 자리에 표시
-          status={todayStatus}                 // 'unpaid' | 'paid'
-          onClickDetail={handleDetailClick}    // ✅ 여기만 넘기면 동작
-        />
+        {/* 오늘의 머니 카드박스 (인라인 구현) */}
+        <section className="rounded-2xl bg-white shadow p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">오늘의 머니</p>
+              <p className="text-xs text-gray-500 mt-0.5">매일 10:00 KST 전</p>
+            </div>
+            {/* 상태 뱃지 필요 시 주석 해제
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                todayStatus === 'paid' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {todayStatus === 'paid' ? '지급 완료' : '미지급'}
+            </span>
+            */}
+          </div>
+
+          <div className="mt-3">
+            <div className="flex items-baseline justify-between">
+              <div>
+                <span className="text-2xl font-extrabold tracking-tight">
+                  {bigNumber.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+                <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <button
+                onClick={handleDetailClick}
+                className="w-full rounded-full bg-blue-600 py-3 text-sm font-bold text-white"
+              >
+                상세보기
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* USDT 자산 카드 */}
         <section className="bg-gradient-to-r from-cyan-400 to-indigo-400 text-white rounded-2xl p-5 shadow-lg">
