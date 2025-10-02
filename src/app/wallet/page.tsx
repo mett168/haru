@@ -284,7 +284,7 @@ export default function HomePage() {
   };
 
   const handleFundingClick = () => {
-    setSelectedPass({ name: "1000", period: "1년", price: 1, image: "/pass-1000.png" });
+    setSelectedPass({ name: "1000", period: "1년", price: 1000, image: "/pass-1000.png" });
   };
 
   return (
