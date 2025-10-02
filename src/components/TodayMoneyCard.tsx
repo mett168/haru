@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 import { getKSTDateString } from "@/lib/dateUtil";
 
@@ -17,7 +18,10 @@ type Props = {
   payoutTimeNote?: string;
 };
 
-export default function TodayMoneyCard({ refCode, payoutTimeNote = "매일 10:00 KST 전" }: Props) {
+export default function TodayMoneyCard({
+  refCode,
+  payoutTimeNote = "매일 10:00 KST 전",
+}: Props) {
   const [row, setRow] = useState<TodayMoneyRow | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -55,12 +59,10 @@ export default function TodayMoneyCard({ refCode, payoutTimeNote = "매일 10:00
   const repay = Number(row?.today_repay ?? 0);
   const interest = Number(row?.today_interest ?? 0);
   const total = Number(row?.total_amount ?? 0);
-  const rawStatus = (row?.status ?? "pending").toLowerCase();
-  const isPaid = rawStatus === "sent" || rawStatus === "success";
 
   return (
     <div className="w-full rounded-2xl bg-white shadow p-4 mt-3">
-      {/* 헤더 */}
+      {/* 헤더 (배지 제거) */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-gray-700">오늘의 머니</p>
@@ -68,17 +70,6 @@ export default function TodayMoneyCard({ refCode, payoutTimeNote = "매일 10:00
             {transferDate} · {payoutTimeNote}
           </p>
         </div>
-        <span
-          className={`text-[11px] px-2 py-1 rounded-full ${
-            isPaid
-              ? "bg-green-100 text-green-700"
-              : rawStatus === "failed"
-              ? "bg-red-100 text-red-700"
-              : "bg-yellow-100 text-yellow-700"
-          }`}
-        >
-          {isPaid ? "지급완료" : rawStatus === "failed" ? "실패" : "미지급"}
-        </span>
       </div>
 
       {/* 본문 */}
@@ -106,6 +97,16 @@ export default function TodayMoneyCard({ refCode, payoutTimeNote = "매일 10:00
             </span>
           </div>
         </div>
+      </div>
+
+      {/* 상세보기 버튼 (카드 내부) */}
+      <div className="mt-4">
+        <Link
+          href={`/harumoney/deposits?ref=${encodeURIComponent(refCode)}`}
+          className="block w-full text-center rounded-xl bg-blue-600 text-white py-2 font-semibold hover:bg-blue-700 transition"
+        >
+          상세보기
+        </Link>
       </div>
     </div>
   );
