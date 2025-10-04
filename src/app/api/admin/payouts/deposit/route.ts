@@ -3,16 +3,62 @@ import { supabase } from "@/lib/supabaseClient";
 
 export const dynamic = "force-dynamic";
 
+function nowKSTISOString(): string {
+  const now = new Date();
+  return new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString();
+}
+
 /**
  * POST /api/admin/payouts/deposit
- * body: { date: "YYYY-MM-DD" }
+ * body:
+ *  - date: "YYYY-MM-DD" (필수)
+ *  - settleOnly?: boolean (선택)  ← true면 상태변경만 수행
+ *  - refCodes?: string[]         ← 부분 처리시 사용(선택, settleOnly 모드에서만)
+ *
+ * 기본(= settleOnly 미지정 또는 false):
+ *   원금 차감 + 상환로그 기록 + 보유자산 적립 + payout_transfers(status: pending 유지)
+ *
+ * settleOnly === true:
+ *   payout_transfers (해당 날짜, pending) → status: 'success', processed_at 기록
+ *   (원금 차감/로그/자산적립은 수행하지 않음)
  */
 export async function POST(req: NextRequest) {
   try {
-    const { date } = await req.json();
+    const { date, settleOnly, refCodes } = await req.json();
+
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return NextResponse.json({ error: "date(YYYY-MM-DD) 필요" }, { status: 400 });
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // A) settleOnly 모드: 상태변경만
+    // ──────────────────────────────────────────────────────────────
+    if (settleOnly === true) {
+      let q = supabase
+        .from("payout_transfers")
+        .update({ status: "success", processed_at: nowKSTISOString() })
+        .eq("transfer_date", date)
+        .eq("status", "pending");
+
+      if (Array.isArray(refCodes) && refCodes.length > 0) {
+        q = q.in("ref_code", refCodes);
+      }
+
+      const { data, error } = await q.select("id, ref_code, user_name, total_amount");
+      if (error) throw error;
+
+      return NextResponse.json({
+        ok: true,
+        mode: "settleOnly",
+        updated: data?.length ?? 0,
+        rows: data ?? [],
+        date,
+      });
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // B) 기존 로직(원금 차감 + 상환로그 + 보유자산 적립 + status는 pending 유지)
+    // ──────────────────────────────────────────────────────────────
 
     // 1) 지급 대상 조회 (pending 상태만)
     const { data: payouts, error: ePayout } = await supabase
@@ -27,7 +73,7 @@ export async function POST(req: NextRequest) {
     let totalLogUpserts = 0;
     let totalRepayUpdated = 0;
     let totalLedgerUpserts = 0;
-    let totalStatusUpdated = 0;
+    // status는 여기서 success로 바꾸지 않음(기존 동작 유지)
 
     for (const p of targets) {
       const ref = String(p.ref_code);
@@ -86,12 +132,15 @@ export async function POST(req: NextRequest) {
       if (updates.length > 0) {
         const results = await Promise.all(
           updates.map((u) =>
-            supabase.from("repayments")
+            supabase
+              .from("repayments")
               .update({ principal_remaining: u.principal_remaining })
               .eq("id", u.id)
           )
         );
-        results.forEach((r) => { if (r.error) throw r.error; });
+        results.forEach((r) => {
+          if (r.error) throw r.error;
+        });
         totalRepayUpdated += updates.length;
       }
 
@@ -110,13 +159,15 @@ export async function POST(req: NextRequest) {
         const { data: up2, error: eUp2 } = await supabase
           .from("asset_ledger")
           .upsert(
-            [{
-              ref_code: ref,
-              amount: depositAmount,
-              reason: "payout",
-              transfer_date: date,
-              created_at: new Date().toISOString(),
-            }],
+            [
+              {
+                ref_code: ref,
+                amount: depositAmount,
+                reason: "payout",
+                transfer_date: date,
+                created_at: nowKSTISOString(),
+              },
+            ],
             { onConflict: "ref_code,transfer_date,reason" }
           )
           .select();
@@ -124,21 +175,17 @@ export async function POST(req: NextRequest) {
         totalLedgerUpserts += up2?.length ?? 0;
       }
 
-      // ── 4) payout_transfers → success 처리
-      const { error: eUpd } = await supabase
-        .from("payout_transfers")
-        .update({ status: "success" })
-        .eq("id", p.id);
-      if (eUpd) throw eUpd;
-      totalStatusUpdated++;
+      // ✅ 주의: 여기서는 payout_transfers.status를 success로 바꾸지 않음
+      // (송금 버튼에서 settleOnly=true로 별도 처리)
     }
 
     return NextResponse.json({
-      message: "송금 완료: 원금 차감 + 상환로그 기록 + 보유자산 적립 + 상태 갱신",
+      ok: true,
+      mode: "deposit",
+      message: "원금 차감 + 상환로그 기록 + 보유자산 적립 (상태는 pending 유지)",
       logs_upserted: totalLogUpserts,
       repayments_updated: totalRepayUpdated,
       ledger_upserted: totalLedgerUpserts,
-      status_updated: totalStatusUpdated,
       date,
     });
   } catch (e: any) {

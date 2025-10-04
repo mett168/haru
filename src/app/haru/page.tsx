@@ -117,7 +117,7 @@ export default function HomePage() {
     setSelectedPass({
       name: "1000",
       period: "1년",
-      price: 10, // 예시
+      price: 1000, // 예시
       image: "/pass-1000.png",
     });
   };
