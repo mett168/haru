@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
+import { ChevronLeft } from "lucide-react"; // ← 아이콘 추가
 
 export default function MyPage() {
   const account = useActiveAccount();
@@ -72,7 +73,17 @@ export default function MyPage() {
         <div className="px-4 pt-2 max-w-[500px] mx-auto">
           {/* 계정관리 */}
           <section className="mb-2">
-            <h2 className="text-md font-semibold text-gray-700 mb-1 pl-2">계정관리</h2>
+            <div className="flex items-center mb-1 pl-2">
+              {/* 돌아가기 버튼 */}
+              <button
+                onClick={() => router.push("/haru")}
+                className="mr-2 text-gray-600 hover:text-gray-900"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <h2 className="text-md font-semibold text-gray-700">계정관리</h2>
+            </div>
+
             <div className="bg-white rounded-xl shadow border text-sm divide-y divide-gray-200">
               {/* 이름 */}
               <InfoItem
@@ -146,15 +157,27 @@ export default function MyPage() {
             </div>
           </section>
 
+          {/* ✅ 계좌 등록 */}
+          <section className="mb-2">
+            <div
+              onClick={() => router.push("/settings/bank")}
+              className="cursor-pointer bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
+            >
+              <span className="text-sm font-medium">계좌 등록</span>
+              <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
+            </div>
+          </section>
+
           {/* 내역관리 */}
           <section className="mb-2">
             <h2 className="text-md font-semibold text-gray-700 mb-1 pl-2">내역관리</h2>
             <div className="bg-white rounded-xl shadow border text-sm divide-y divide-gray-200">
+              {/* 💱 현금 교환 내역 */}
               <button
-                onClick={() => router.push("/mypage/history/usdt")}
+                onClick={() => router.push("/mypage/history/cash-exchange")}
                 className="w-full px-4 py-3 hover:bg-gray-50 flex justify-between items-center"
               >
-                <span>USDT 입출금 내역</span>
+                <span>현금 교환 내역</span>
                 <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
               </button>
             </div>
@@ -221,12 +244,6 @@ function InfoItem({
           />
           <button onClick={onSave} className="text-blue-500 text-sm">
             저장
-          </button>
-          <button
-            onClick={() => onInputChange(value || "")}
-            className="text-gray-400 text-xs"
-          >
-            취소
           </button>
         </div>
       ) : (

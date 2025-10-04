@@ -14,11 +14,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "date(YYYY-MM-DD) 필요" }, { status: 400 });
     }
 
-    // 1) 당일 지급 대상
+    // 1) 지급 대상 조회 (pending 상태만)
     const { data: payouts, error: ePayout } = await supabase
       .from("payout_transfers")
-      .select("ref_code, today_repay, total_amount")
-      .eq("transfer_date", date);
+      .select("id, ref_code, today_repay, total_amount")
+      .eq("transfer_date", date)
+      .eq("status", "pending");
     if (ePayout) throw ePayout;
 
     const targets = (payouts ?? []).filter((r: any) => Number(r.today_repay || 0) > 0);
@@ -26,19 +27,20 @@ export async function POST(req: NextRequest) {
     let totalLogUpserts = 0;
     let totalRepayUpdated = 0;
     let totalLedgerUpserts = 0;
+    let totalStatusUpdated = 0;
 
     for (const p of targets) {
       const ref = String(p.ref_code);
       const repayToday = +Number(p.today_repay || 0).toFixed(6);
       const depositAmount = +Number(p.total_amount || 0).toFixed(6);
 
-      // 유저의 active 원금 목록 가져와 분배
+      // ── 2) 유저의 active 원금 목록 가져오기
       const { data: reps, error: eReps } = await supabase
         .from("repayments")
         .select("id, investment_id, principal_remaining, daily_amount")
         .eq("ref_code", ref)
         .eq("status", "active")
-        .order("daily_amount", { ascending: false }); // 필요시 start_date ASC
+        .order("daily_amount", { ascending: false });
       if (eReps) throw eReps;
 
       let remain = repayToday;
@@ -52,6 +54,7 @@ export async function POST(req: NextRequest) {
         source: string;
       }> = [];
 
+      // ── 2-1) 원금 차감 & 상환 로그 준비
       for (const r of reps ?? []) {
         if (remain <= 0) break;
 
@@ -79,22 +82,20 @@ export async function POST(req: NextRequest) {
         remain = +(remain - portion).toFixed(6);
       }
 
-      // 2-1) 원금 차감 업데이트: 행별 update (upsert 아님)
+      // ── 2-2) repayments 업데이트
       if (updates.length > 0) {
-        const tasks = updates.map((u) =>
-          supabase
-            .from("repayments")
-            .update({ principal_remaining: u.principal_remaining })
-            .eq("id", u.id)
+        const results = await Promise.all(
+          updates.map((u) =>
+            supabase.from("repayments")
+              .update({ principal_remaining: u.principal_remaining })
+              .eq("id", u.id)
+          )
         );
-        const results = await Promise.all(tasks);
-        for (const r of results) {
-          if (r.error) throw r.error;
-        }
+        results.forEach((r) => { if (r.error) throw r.error; });
         totalRepayUpdated += updates.length;
       }
 
-      // 2-2) 상환 로그 기록 (멱등 upsert: 유니크 제약 필요)
+      // ── 2-3) 상환 로그 기록
       if (logs.length > 0) {
         const { data: ins, error: eIns } = await supabase
           .from("repayment_logs")
@@ -104,25 +105,40 @@ export async function POST(req: NextRequest) {
         totalLogUpserts += ins?.length ?? 0;
       }
 
-      // 3) 보유자산 적립 (asset_ledger upsert)
+      // ── 3) 보유자산 적립 (asset_ledger)
       if (depositAmount > 0) {
         const { data: up2, error: eUp2 } = await supabase
           .from("asset_ledger")
           .upsert(
-            [{ ref_code: ref, amount: depositAmount, reason: "payout", transfer_date: date }],
+            [{
+              ref_code: ref,
+              amount: depositAmount,
+              reason: "payout",
+              transfer_date: date,
+              created_at: new Date().toISOString(),
+            }],
             { onConflict: "ref_code,transfer_date,reason" }
           )
           .select();
         if (eUp2) throw eUp2;
         totalLedgerUpserts += up2?.length ?? 0;
       }
+
+      // ── 4) payout_transfers → success 처리
+      const { error: eUpd } = await supabase
+        .from("payout_transfers")
+        .update({ status: "success" })
+        .eq("id", p.id);
+      if (eUpd) throw eUpd;
+      totalStatusUpdated++;
     }
 
     return NextResponse.json({
-      message: "송금 완료: 원금 차감 + 상환로그 기록 + 보유자산 적립",
+      message: "송금 완료: 원금 차감 + 상환로그 기록 + 보유자산 적립 + 상태 갱신",
       logs_upserted: totalLogUpserts,
       repayments_updated: totalRepayUpdated,
       ledger_upserted: totalLedgerUpserts,
+      status_updated: totalStatusUpdated,
       date,
     });
   } catch (e: any) {
