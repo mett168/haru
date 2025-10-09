@@ -2,19 +2,11 @@
   "name": "하루머니",
   "short_name": "하루머니",
   "start_url": "/",
-  "display": "browser",      
+  "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#0066ff",
   "icons": [
-    {
-      "src": "/icon192.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "/icon512.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
+    { "src": "/icon192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }

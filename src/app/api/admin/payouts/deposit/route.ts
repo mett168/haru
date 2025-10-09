@@ -16,7 +16,7 @@ function nowKSTISOString(): string {
  *  - refCodes?: string[]         ← 부분 처리시 사용(선택, settleOnly 모드에서만)
  *
  * 기본(= settleOnly 미지정 또는 false):
- *   원금 차감 + 상환로그 기록 + 보유자산 적립 + payout_transfers(status: pending 유지)
+ *   원금 차감 + 상환로그 기록 + 보유자산 적립(asset_ledger + asset_history) + payout_transfers(status: sent 로 변경)
  *
  * settleOnly === true:
  *   payout_transfers (해당 날짜, pending) → status: 'success', processed_at 기록
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // A) settleOnly 모드: 상태변경만
+    // A) settleOnly 모드: 상태변경만 (기존 동작 유지: success 로 변경)
     // ──────────────────────────────────────────────────────────────
     if (settleOnly === true) {
       let q = supabase
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // B) 기존 로직(원금 차감 + 상환로그 + 보유자산 적립 + status는 pending 유지)
+    // B) 원금 차감 + 상환로그 + 보유자산 적립 + 상태 sent 로 변경
     // ──────────────────────────────────────────────────────────────
 
     // 1) 지급 대상 조회 (pending 상태만)
@@ -68,12 +68,13 @@ export async function POST(req: NextRequest) {
       .eq("status", "pending");
     if (ePayout) throw ePayout;
 
-    const targets = (payouts ?? []).filter((r: any) => Number(r.today_repay || 0) > 0);
+    // ✅ 변경: total_amount 기준으로 대상 선정 (원금 0 + 이자만 지급 케이스 포함)
+    const targets = (payouts ?? []).filter((r: any) => Number(r.total_amount || 0) > 0);
 
     let totalLogUpserts = 0;
     let totalRepayUpdated = 0;
     let totalLedgerUpserts = 0;
-    // status는 여기서 success로 바꾸지 않음(기존 동작 유지)
+    let totalHistoryUpserts = 0;
 
     for (const p of targets) {
       const ref = String(p.ref_code);
@@ -100,7 +101,7 @@ export async function POST(req: NextRequest) {
         source: string;
       }> = [];
 
-      // ── 2-1) 원금 차감 & 상환 로그 준비
+      // ── 2-1) 원금 차감 & 상환 로그 준비 (기존 로직 유지)
       for (const r of reps ?? []) {
         if (remain <= 0) break;
 
@@ -154,7 +155,7 @@ export async function POST(req: NextRequest) {
         totalLogUpserts += ins?.length ?? 0;
       }
 
-      // ── 3) 보유자산 적립 (asset_ledger)
+      // ── 3-1) 보유자산 적립 (asset_ledger) — 기존 유지
       if (depositAmount > 0) {
         const { data: up2, error: eUp2 } = await supabase
           .from("asset_ledger")
@@ -175,17 +176,51 @@ export async function POST(req: NextRequest) {
         totalLedgerUpserts += up2?.length ?? 0;
       }
 
-      // ✅ 주의: 여기서는 payout_transfers.status를 success로 바꾸지 않음
-      // (송금 버튼에서 settleOnly=true로 별도 처리)
+      // ── 3-2) 보유자산 이력 적립 (asset_history) — ✅ 신규 추가
+      if (depositAmount > 0) {
+        const { data: up3, error: eUp3 } = await supabase
+          .from("asset_history")
+          .upsert(
+            [
+              {
+                ref_code: ref,
+                direction: "in",            // 입금
+                amount: depositAmount,
+                purpose: "payout",          // 뷰/집계와 일치시키세요
+                source: "하루머니",
+                tx_date: date,              // YYYY-MM-DD
+                created_at: nowKSTISOString(),
+                uniq_key: `payout:${date}:${ref}`, // UNIQUE 인덱스 권장
+              },
+            ],
+            { onConflict: "uniq_key" }
+          )
+          .select();
+        if (eUp3) throw eUp3;
+        totalHistoryUpserts += up3?.length ?? 0;
+      }
+    }
+
+    // ── 4) payout_transfers.status = 'sent' 으로 실제 변경 (✅ 신규)
+    if (targets.length > 0) {
+      const refList = targets.map((t) => t.ref_code);
+      const { error: eUpdPT } = await supabase
+        .from("payout_transfers")
+        .update({ status: "sent", processed_at: nowKSTISOString() })
+        .eq("transfer_date", date)
+        .in("ref_code", refList);
+      if (eUpdPT) throw eUpdPT;
     }
 
     return NextResponse.json({
       ok: true,
       mode: "deposit",
-      message: "원금 차감 + 상환로그 기록 + 보유자산 적립 (상태는 pending 유지)",
+      message: "원금 차감 + 상환로그 + 보유자산 적립(asset_ledger & asset_history) + 상태(sent) 변경",
       logs_upserted: totalLogUpserts,
       repayments_updated: totalRepayUpdated,
       ledger_upserted: totalLedgerUpserts,
+      history_upserted: totalHistoryUpserts,
+      status_updated: targets.length,
       date,
     });
   } catch (e: any) {

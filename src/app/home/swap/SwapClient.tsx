@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import { supabase } from "@/lib/supabaseClient";
 import { getKSTDateString, getKSTISOString } from "@/lib/dateUtil";
+import { addCashWithdraw } from "@/lib/assetHistory"; // ✅ 추가
 
 export default function SwapClient() {
   const router = useRouter();
@@ -80,7 +81,14 @@ export default function SwapClient() {
         );
       if (upErr) throw upErr;
 
-      // 완료 페이지 이동 (또는 토스트/알림)
+      // ✅ 3) 보유자산 이력 추가 (asset_history)
+      await addCashWithdraw({
+        ref_code: user.ref_code,
+        amount: amt,
+        memo: "현금교환 출금",
+      });
+
+      // 완료 페이지 이동
       router.push("/home/swap/complete");
     } catch (err: any) {
       console.error("교환 신청 실패:", err);

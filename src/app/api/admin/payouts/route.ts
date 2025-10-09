@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     // 비율 (%/년)
     const SELF_RATE = 60.0;
     const INV_RATE  = 12.0;
-    const CTR_RATE  = 24.0;
+    const CTR_RATE  = 48.0;
 
     const rawRows: any[] = [];
     const repayByRc = new Map<string, number>();    // 미리보기용(수취인 기준)

@@ -16,6 +16,9 @@ export default function MyPage() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
 
+  // ✅ 본사 계좌 모달 상태
+  const [showCompanyAcc, setShowCompanyAcc] = useState(false);
+
   useEffect(() => {
     const fetchUserData = async () => {
       if (!account?.address) return;
@@ -166,6 +169,15 @@ export default function MyPage() {
               <span className="text-sm font-medium">계좌 등록</span>
               <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
             </div>
+
+            {/* ✅ 본사 계좌 (하드코딩) */}
+            <div
+              onClick={() => setShowCompanyAcc(true)}
+              className="mt-2 cursor-pointer bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
+            >
+              <span className="text-sm font-medium">본사 계좌</span>
+              <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
+            </div>
           </section>
 
           {/* 내역관리 */}
@@ -207,6 +219,13 @@ export default function MyPage() {
             로그아웃
           </button>
         </div>
+
+        {/* ✅ 본사 계좌 모달 */}
+        <CompanyAccountModal
+          open={showCompanyAcc}
+          onClose={() => setShowCompanyAcc(false)}
+        />
+
         <BottomNav />
       </main>
     </>
@@ -254,6 +273,70 @@ function InfoItem({
           </span>
         </span>
       )}
+    </div>
+  );
+}
+
+/* =========================
+   ✅ 본사 계좌 모달 (하드코딩)
+   ========================= */
+function CompanyAccountModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+
+  // 하드코딩된 본사 계좌
+  const bankName = "기업은행";
+  const accountNumber = "13710454101019";
+  const holderName = "CUICHENGXUN";
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(accountNumber);
+      alert("계좌번호가 복사되었습니다 ✅");
+    } catch {
+      alert("복사에 실패했습니다 ❌");
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      {/* 배경 */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      {/* 모달 */}
+      <div className="relative w-full max-w-[500px] mx-auto bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-lg">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-base font-semibold">본사 계좌</h3>
+          <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+            닫기
+          </button>
+        </div>
+
+        <div className="rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold">{bankName}</span>
+            <button
+              onClick={handleCopy}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              복사하기
+            </button>
+          </div>
+
+          <p className="text-sm mt-2 break-all">
+            <span className="text-gray-500 mr-1">계좌번호</span>
+            {accountNumber}
+          </p>
+          <p className="text-sm">
+            <span className="text-gray-500 mr-1">예금주</span>
+            {holderName}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

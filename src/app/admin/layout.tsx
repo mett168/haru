@@ -10,6 +10,7 @@ const NAV = [
   { href: "/admin/repayments", label: "원금상환" }, // ✅ 추가
   { href: "/admin/harumoney", label: "하루머니" },
   { href: "/admin/users", label: "사용자" },
+  { href: "/admin/balances-net", label: "보유자산(실제)" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

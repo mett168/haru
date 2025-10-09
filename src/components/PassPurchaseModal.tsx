@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { supabase } from "@/lib/supabaseClient";
 import { getKSTISOString, getKSTDateString } from "@/lib/dateUtil";
+import { addReinvestWithdraw } from "@/lib/assetHistory"; // ✅ 추가
 
 /* --------------------------- 성공 모달 --------------------------- */
 function TopupSuccessModal({
@@ -42,18 +43,17 @@ function TopupSuccessModal({
 /* --------------------------- Props --------------------------- */
 interface PassPurchaseModalProps {
   selected: {
-    name: string;    // 상품명 (예: "1000 패스")
-    period: string;  // "1년" 등 (만기 계산 참고용)
-    price: number;   // 단가(USDT)
-    image: string;   // 썸네일
+    name: string;
+    period: string;
+    price: number;
+    image: string;
   };
-  /** 보유 USDT는 보여주기만, 실제 잔액 체크/전송은 하지 않음 */
   usdtBalance: number;
   onClose: () => void;
-  onPurchased?: () => void; // 완료 후 상위에서 새로고침용
+  onPurchased?: () => void;
 }
 
-/* --------------------------- 기간 계산 유틸 --------------------------- */
+/* --------------------------- 기간 계산 --------------------------- */
 function addMonthsAndDays(base: Date, months: number, days: number): Date {
   const d = new Date(base);
   const targetMonth = d.getMonth() + months;
@@ -87,7 +87,6 @@ export default function PassPurchaseModal({
 }: PassPurchaseModalProps) {
   const account = useActiveAccount();
 
-  // 수량/총액
   const [quantity, setQuantity] = useState<number>(1);
   const totalPrice = useMemo(
     () => Math.max(1, quantity) * (selected?.price ?? 0),
@@ -97,23 +96,20 @@ export default function PassPurchaseModal({
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // 만기일 프리뷰: 기본 정책 = 오늘(KST) + 12개월 - 1일
   const previewMaturity = useMemo(() => {
     const base = new Date();
     const maturity = addMonthsAndDays(base, 12, -1);
     return getKSTDateString(maturity);
   }, []);
 
-  // 보충(=투자 등록 + 보유자산 차감 + 보충 이력 기록)
+  // ✅ 보충 처리 함수
   const handleTopup = async () => {
     if (!account?.address) {
       alert("지갑이 연결되지 않았습니다.");
       return;
     }
-
-    // 화면상의 보유자산이 부족하면 차단(선택)
     if (usdtBalance < totalPrice) {
-      alert("보유 자산이 부족합니다. (자산 카드 합계 < 보충 금액)");
+      alert("보유 자산이 부족합니다.");
       return;
     }
 
@@ -128,12 +124,11 @@ export default function PassPurchaseModal({
       if (userError) throw userError;
       if (!user?.ref_code) throw new Error("내 초대코드(ref_code)를 찾을 수 없습니다.");
 
-      // KST 날짜들
       const investDateKST = getKSTDateString(new Date());
       const maturity = addMonthsAndDays(new Date(), 12, -1);
       const maturityDateKST = getKSTDateString(maturity);
 
-      // 1) investments INSERT (id 회수)
+      // 1️⃣ investments INSERT
       const { data: investRow, error: insertErr } = await supabase
         .from("investments")
         .insert({
@@ -149,7 +144,7 @@ export default function PassPurchaseModal({
         .single();
       if (insertErr) throw insertErr;
 
-      // 2) 보충 이력 저장 (topup_logs)
+      // 2️⃣ 보충 로그 저장 (topup_logs)
       const { error: logErr } = await supabase.from("topup_logs").insert({
         ref_code: user.ref_code,
         amount_usdt: totalPrice,
@@ -165,9 +160,8 @@ export default function PassPurchaseModal({
       });
       if (logErr) throw logErr;
 
-      // 3) 보유자산 차감 (asset_ledger: reason='topup' 음수로 누적 upsert)
+      // 3️⃣ 보유자산 차감 (asset_ledger)
       const reason = "topup";
-      // 오늘 같은 키가 있으면 누적
       const { data: exist } = await supabase
         .from("asset_ledger")
         .select("amount")
@@ -186,7 +180,14 @@ export default function PassPurchaseModal({
         );
       if (upErr) throw upErr;
 
-      // 성공 모달 노출 및 상위 새로고침
+      // ✅ 4️⃣ 보유자산 이력 추가 (asset_history)
+      await addReinvestWithdraw({
+        ref_code: user.ref_code,
+        amount: totalPrice,
+        memo: "보충 출금(재투자)",
+      });
+
+      // 성공 모달 표시 및 상위 새로고침
       setShowSuccessModal(true);
       onPurchased?.();
     } catch (err: any) {
@@ -203,7 +204,6 @@ export default function PassPurchaseModal({
     return () => document.removeEventListener("keydown", handleKey);
   }, [onClose]);
 
-  // 수량 조절
   const dec = () => setQuantity((q) => Math.max(1, q - 1));
   const inc = () => setQuantity((q) => Math.min(99, q + 1));
   const onChangeQty = (v: string) => {
@@ -241,11 +241,9 @@ export default function PassPurchaseModal({
             </svg>
           </button>
 
-          {/* 제목 */}
           <div className="text-center mb-2 text-lg font-bold">보충하기</div>
           <div className="text-sm text-gray-600 mb-1">주문정보</div>
 
-          {/* 주문 카드 */}
           <div className="flex items-center space-x-3 p-3 border rounded-xl my-2">
             <img src={selected.image} className="w-12 h-12 rounded-lg" alt={selected.name} />
             <div>
@@ -256,14 +254,12 @@ export default function PassPurchaseModal({
             </div>
           </div>
 
-          {/* 수량 */}
           <div className="mt-2 flex items-center justify-between">
             <span className="text-sm text-gray-700 font-medium">수량</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={dec}
                 className="w-8 h-8 rounded-md bg-gray-100 hover:bg-gray-200 text-lg leading-none"
-                aria-label="decrease quantity"
               >
                 −
               </button>
@@ -277,14 +273,12 @@ export default function PassPurchaseModal({
               <button
                 onClick={inc}
                 className="w-8 h-8 rounded-md bg-gray-100 hover:bg-gray-200 text-lg leading-none"
-                aria-label="increase quantity"
               >
                 +
               </button>
             </div>
           </div>
 
-          {/* 금액 영역 */}
           <div className="flex justify-between text-sm mt-3">
             <span className="text-gray-700 font-medium">
               보충 금액 <span className="text-gray-400">({selected.price.toLocaleString()}×{quantity})</span>
@@ -297,7 +291,6 @@ export default function PassPurchaseModal({
             <span className="text-gray-600">{usdtBalance} USDT</span>
           </div>
 
-          {/* 보충(투자 등록) 버튼 */}
           <button
             onClick={handleTopup}
             disabled={loading}
