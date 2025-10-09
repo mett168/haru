@@ -96,6 +96,7 @@ export default function AdminPayoutsPage() {
   };
 
   // --- 송금(보유자산 원장 적립) : /api/admin/payouts/deposit
+  //     API 응답: { ok, date, totalTargets, successCount, results: [{ref_code, amount, ok, reason?}, ...] }
   const runDeposit = async () => {
     if (!date) return alert("날짜를 선택하세요.");
     setLoading(true);
@@ -103,13 +104,28 @@ export default function AdminPayoutsPage() {
       const res = await fetch(`/api/admin/payouts/deposit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }),
+        body: JSON.stringify({ date }), // 필요 시 { date, settleOnly: true }
       });
       const json = await res.json();
-      if (res.ok) {
-        const inserted = Number(json.inserted ?? 0);
-        alert(`송금(보유자산 적립) 완료: ${inserted}건`);
-        await fetchData();
+
+      if (res.ok && json?.ok) {
+        const total = Number(json.totalTargets ?? 0);
+        const success = Number(json.successCount ?? 0);
+        const failures = Array.isArray(json.results)
+          ? json.results.filter((r: any) => r?.ok === false)
+          : [];
+
+        if (failures.length > 0) {
+          const first = failures[0];
+          const msg =
+            `송금(원장/히스토리 기록) 완료: ${success}/${total}건\n` +
+            `실패 ${failures.length}건 → 첫 건: ${first?.ref_code || "-"} / ${first?.reason || ""}`;
+          alert(msg);
+        } else {
+          alert(`송금(보유자산 적립) 완료: ${success}/${total}건`);
+        }
+
+        await fetchData(); // 상태 갱신
       } else {
         alert(json.error || "송금(적립) 에러");
       }
@@ -161,7 +177,7 @@ export default function AdminPayoutsPage() {
         >
           지급 실행
         </button>
-        {/* ✅ 신규: 송금 버튼 (asset_ledger 적립) */}
+        {/* ✅ 송금 버튼 (asset_ledger + asset_history 기록) */}
         <button
           onClick={runDeposit}
           disabled={loading}
