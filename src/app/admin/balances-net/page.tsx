@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+
+export const dynamic = "force-dynamic";
 
 type Row = {
   ref_code: string;
@@ -13,6 +16,7 @@ type Row = {
 };
 
 export default function AdminBalancesNetPage() {
+  const router = useRouter();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState("");
@@ -22,7 +26,7 @@ export default function AdminBalancesNetPage() {
       setLoading(true);
       try {
         const { data, error } = await supabase
-          .from("asset_history_totals_v")
+          .from("asset_ledger_totals_v")
           .select(
             "ref_code,name,total_in_deposit,total_out_reinvest,total_out_cash,balance_net"
           )
@@ -38,9 +42,10 @@ export default function AdminBalancesNetPage() {
   const filtered = useMemo(() => {
     const key = q.trim().toLowerCase();
     if (!key) return rows;
-    return rows.filter((r) =>
-      (r.ref_code || "").toLowerCase().includes(key) ||
-      (r.name || "").toLowerCase().includes(key)
+    return rows.filter(
+      (r) =>
+        (r.ref_code || "").toLowerCase().includes(key) ||
+        (r.name || "").toLowerCase().includes(key)
     );
   }, [rows, q]);
 
@@ -65,13 +70,20 @@ export default function AdminBalancesNetPage() {
         ].join(",")
       )
       .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([header + body], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "balances_net.csv";
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // ✅ 자산이력 페이지로 이동
+  const goLedgerHistory = (refCode: string) => {
+    router.push(`/admin/asset-ledger?ref=${encodeURIComponent(refCode)}`);
   };
 
   return (
@@ -116,14 +128,20 @@ export default function AdminBalancesNetPage() {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
+                  <td
+                    colSpan={7}
+                    className="px-4 py-6 text-center text-gray-500"
+                  >
                     불러오는 중…
                   </td>
                 </tr>
               )}
               {!loading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
+                  <td
+                    colSpan={7}
+                    className="px-4 py-6 text-center text-gray-400"
+                  >
                     데이터 없음
                   </td>
                 </tr>
@@ -148,17 +166,19 @@ export default function AdminBalancesNetPage() {
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <a
-                          href={`/harumoney/investments?ref=${encodeURIComponent(r.ref_code)}`}
+                          href={`/harumoney/investments?ref=${encodeURIComponent(
+                            r.ref_code
+                          )}`}
                           className="px-2 py-1 rounded bg-blue-600 text-white text-xs"
                         >
                           투자내역
                         </a>
-                        <a
-                          href={`/admin/asset-history/add?ref=${encodeURIComponent(r.ref_code)}`}
+                        <button
+                          onClick={() => goLedgerHistory(r.ref_code)}
                           className="px-2 py-1 rounded bg-gray-700 text-white text-xs"
                         >
-                          이력추가
-                        </a>
+                          자산이력
+                        </button>
                       </div>
                     </td>
                   </tr>

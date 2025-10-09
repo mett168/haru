@@ -18,22 +18,25 @@ const KRW_PER_USDT = 1500;
 // 화면에서 쓰는 타입만 남김
 type SelectedPass = { name: string; period: string; price: number; image: string };
 
-// 보유자산 이력용 타입
-type AssetHistoryRow = {
+// 🔄 ledger 이력 표시용 타입
+type LedgerViewRow = {
   id: string;
-  kst_date: string;
-  direction: "in" | "out";
-  change_type: "haru_deposit" | "reinvest_withdraw" | "cash_withdraw";
-  amount: number;
-  memo: string | null;
+  date: string;                   // transfer_date
+  direction: "in" | "out";        // 계산된 방향
+  amount: number;                 // 표시용 절댓값
+  label: string;                  // reason 라벨
 };
 
-function labelOf(t: string) {
-  switch (t) {
-    case "haru_deposit": return "하루머니 입금";
-    case "reinvest_withdraw": return "보충 출금(재투자)";
-    case "cash_withdraw": return "현금교환 출금";
-    default: return "자산 변동";
+function reasonLabel(reason: string) {
+  switch (reason) {
+    case "payout":
+      return "하루머니 입금";
+    case "topup":
+      return "보충 출금";
+    case "cashout":
+      return "현금교환 출금";
+    default:
+      return "자산 변동";
   }
 }
 
@@ -58,7 +61,7 @@ export default function HomePage() {
 
   // 보유자산 이력 보기 토글
   const [showHistory, setShowHistory] = useState(false);
-  const [historyRows, setHistoryRows] = useState<AssetHistoryRow[]>([]);
+  const [historyRows, setHistoryRows] = useState<LedgerViewRow[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   // 로그인 안되어 있으면 리다이렉트
@@ -86,7 +89,6 @@ export default function HomePage() {
     setName(user?.name ?? "");
 
     if (!rc) {
-      // ref_code 없으면 카드 값 0으로 초기화
       setTotalInvestUSDT(0);
       setUsdtBalance("0.00");
       return;
@@ -136,32 +138,46 @@ export default function HomePage() {
     }
   };
 
-  // ===== 보유자산 이력 로드 =====
+  // ===== 보유자산 이력 (asset_ledger 기준) =====
   const fetchAssetHistory = async () => {
     if (!refCode) return;
     setLoadingHistory(true);
     try {
       const { data, error } = await supabase
-        .from("asset_history")
-        .select("id,kst_date,direction,change_type,amount,memo")
+        .from("asset_ledger")
+        .select("id, transfer_date, amount, reason, created_at")
         .eq("ref_code", refCode)
-        .order("kst_date", { ascending: false })
-        .order("id", { ascending: false });
+        .order("transfer_date", { ascending: false })
+        .order("created_at", { ascending: false });
       if (error) throw error;
-      setHistoryRows((data ?? []) as AssetHistoryRow[]);
+
+      const rows: LedgerViewRow[] = (data ?? []).map((r: any) => {
+        const amt = Number(r.amount ?? 0);
+        const isOut = r.reason === "cashout" || r.reason === "topup" || amt < 0;
+        return {
+          id: r.id,
+          date: r.transfer_date,
+          direction: isOut ? "out" : "in",
+          amount: Math.abs(amt),
+          label: reasonLabel(r.reason),
+        };
+      });
+
+      setHistoryRows(rows);
     } finally {
       setLoadingHistory(false);
     }
   };
 
+  // 합계(ledger 기준)
   const totalIn = useMemo(
     () => historyRows.filter(r => r.direction === "in")
-      .reduce((s, r) => s + Number(r.amount || 0), 0),
+      .reduce((s, r) => s + r.amount, 0),
     [historyRows]
   );
   const totalOut = useMemo(
     () => historyRows.filter(r => r.direction === "out")
-      .reduce((s, r) => s + Number(r.amount || 0), 0),
+      .reduce((s, r) => s + r.amount, 0),
     [historyRows]
   );
   const balanceCalc = useMemo(() => totalIn - totalOut, [totalIn, totalOut]);
@@ -177,7 +193,6 @@ export default function HomePage() {
   };
 
   const goSwap = () => {
-    // 보유 자산(가상 잔액)을 교환 화면으로 전달
     const raw = parseFloat(usdtBalance) || 0;
     if (typeof window !== "undefined") {
       sessionStorage.setItem("usdt_balance", String(raw));
@@ -293,13 +308,11 @@ export default function HomePage() {
         </section>
       </div>
 
-      {/* ✅ 보유자산 이력 보기 카드 */}
+      {/* 보유자산 이력 보기 토글 */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
         <div className="rounded-2xl bg-white shadow p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xl font-bold">보유자산 이력 보기</p>
-            </div>
+            <p className="text-xl font-bold">보유자산 이력 보기</p>
             <button
               onClick={toggleHistory}
               className="px-4 py-2 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400 text-white shadow"
@@ -310,7 +323,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* ✅ 이력 목록 */}
+      {/* 이력 목록 */}
       {showHistory && (
         <div className="max-w-[500px] mx-auto px-3 mt-3 mb-6">
           <div className="rounded-2xl bg-white shadow p-4">
@@ -333,27 +346,26 @@ export default function HomePage() {
             {!loadingHistory && historyRows.length === 0 && (
               <div className="p-4 text-center text-gray-400">이력이 없습니다.</div>
             )}
-            {!loadingHistory && historyRows.map((r) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between px-4 py-3 border-b last:border-b-0"
-              >
-                <div>
-                  <div className="text-sm text-gray-500">{r.kst_date}</div>
-                  <div className="text-xs text-gray-400">
-                    {r.memo ?? labelOf(r.change_type)}
+            {!loadingHistory &&
+              historyRows.map((r) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between px-4 py-3 border-b last:border-b-0"
+                >
+                  <div>
+                    <div className="text-sm text-gray-500">{r.date}</div>
+                    <div className="text-xs text-gray-400">{r.label}</div>
+                  </div>
+                  <div
+                    className={`font-semibold ${
+                      r.direction === "in" ? "text-green-600" : "text-red-600"
+                    }`}
+                  >
+                    {r.direction === "in" ? "+" : "-"}
+                    {r.amount.toFixed(2)} USDT
                   </div>
                 </div>
-                <div
-                  className={`font-semibold ${
-                    r.direction === "in" ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {r.direction === "in" ? "+" : "-"}
-                  {Number(r.amount).toFixed(2)} USDT
-                </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}
