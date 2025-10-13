@@ -291,7 +291,7 @@ function CompanyAccountModal({
 
   // 하드코딩된 본사 계좌
   const bankName = "기업은행";
-  const accountNumber = "13710454101019";
+  const accountNumber = "137-104541-01-019";
   const holderName = "CUICHENGXUN";
 
   const handleCopy = async () => {
