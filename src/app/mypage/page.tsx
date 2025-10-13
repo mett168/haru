@@ -304,11 +304,23 @@ function CompanyAccountModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      {/* 배경 */}
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
+      {/* 딤(배경) */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      {/* 모달 */}
-      <div className="relative w-full max-w-[500px] mx-auto bg-white rounded-t-2xl sm:rounded-2xl p-5 shadow-lg">
+
+      {/* 모달 패널 */}
+      <div
+        className="
+          relative w-[calc(100%-32px)] max-w-[500px] mx-auto
+          bg-white rounded-t-2xl sm:rounded-2xl shadow-lg
+
+          /* ▼ 핵심: 높이 제한 + 스크롤 */
+          max-h-[75vh] overflow-y-auto overscroll-contain
+
+          /* ▼ 하단 네비/안전영역에 가리지 않도록 패딩 */
+          p-5 pb-[calc(env(safe-area-inset-bottom,0px)+88px)]
+        "
+      >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold">본사 계좌</h3>
           <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
@@ -316,12 +328,12 @@ function CompanyAccountModal({
           </button>
         </div>
 
-        <div className="rounded-xl border border-gray-200 p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold">{bankName}</span>
+        <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-sm font-semibold text-gray-800">{bankName}</span>
             <button
               onClick={handleCopy}
-              className="text-xs text-blue-600 hover:underline"
+              className="text-xs text-blue-600 hover:underline shrink-0"
             >
               복사하기
             </button>
@@ -329,11 +341,11 @@ function CompanyAccountModal({
 
           <p className="text-sm mt-2 break-all">
             <span className="text-gray-500 mr-1">계좌번호</span>
-            {accountNumber}
+            <span className="text-gray-900">{accountNumber}</span>
           </p>
-          <p className="text-sm">
+          <p className="text-sm mt-1 break-all">
             <span className="text-gray-500 mr-1">예금주</span>
-            {holderName}
+            <span className="text-gray-900">{holderName}</span>
           </p>
         </div>
       </div>
