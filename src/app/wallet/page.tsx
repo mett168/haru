@@ -318,11 +318,11 @@ export default function HomePage() {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-extrabold tracking-tight">{fmt2(totalInvestUSDT)}</span>
+              <span className="text-xl font-extrabold tracking-tight">{fmt2(totalInvestUSDT)}</span>
               <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
             </div>
             <div>
-              <span className="text-2xl font-extrabold tracking-tight text-gray-800">₩ {totalInvestKRW.toLocaleString()}</span>
+              <span className="text-xl font-extrabold tracking-tight text-gray-800">₩ {totalInvestKRW.toLocaleString()}</span>
             </div>
           </div>
           <div className="mt-4">
@@ -338,7 +338,7 @@ export default function HomePage() {
 
       {/* 잔여 원금 (repayments 합계) */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
-        <div className="rounded-2xl bg-white shadow p-4">
+        <div className="rounded-xl bg-white shadow p-4">
           <div className="flex items-start justify-between">
             <p className="text-sm font-semibold text-gray-800">잔여 원금</p>
             {repayLoading && (
@@ -347,11 +347,11 @@ export default function HomePage() {
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-extrabold tracking-tight">{fmt2(remainingFromTable)}</span>
+              <span className="text-xl font-extrabold tracking-tight">{fmt2(remainingFromTable)}</span>
               <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
             </div>
             <div>
-              <span className="text-2xl font-extrabold tracking-tight text-gray-800">
+              <span className="text-xl font-extrabold tracking-tight text-gray-800">
                 ₩ {(Math.trunc(remainingFromTable * KRW_PER_USDT)).toLocaleString()}
               </span>
             </div>
@@ -361,7 +361,7 @@ export default function HomePage() {
 
       {/* 오늘의 원금 상환 + 누적 상환 */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
-        <div className="rounded-2xl bg-white shadow p-4">
+        <div className="rounded-xl bg-white shadow p-4">
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-800">오늘의 원금 상환</p>
@@ -373,7 +373,7 @@ export default function HomePage() {
           <div className="mt-3">
             <div className="flex items-baseline justify_between">
               <div>
-                <span className="text-2xl font-extrabold tracking-tight">{fmt2(todayAmount)}</span>
+                <span className="text-xl font-extrabold tracking-tight">{fmt2(todayAmount)}</span>
                 <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
               </div>
               <div className="text-sm font-semibold text-gray-600"></div>
@@ -396,7 +396,7 @@ export default function HomePage() {
       <div className="max-w-[500px] mx-auto px-3 pt-2">
         <section className="bg-gradient-to-r from-cyan-400 to-indigo-400 text-white rounded-2xl p-5 shadow-lg">
           <div className="text-sm font-semibold mb-1">보유 자산</div>
-          <div className="text-3xl font-bold mb-5 tracking-wide flex items-center gap-1">
+          <div className="text-xl font-bold mb-5 tracking-wide flex items-center gap-1">
             {usdtBalance} <span className="text-lg font-semibold">USDT</span>
           </div>
           <div className="flex justify-between text-sm font-semibold gap-2">

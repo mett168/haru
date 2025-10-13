@@ -247,20 +247,20 @@ export default function HomePage() {
 
       {/* 총 투자 금액 카드 */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
-        <div className="rounded-2xl bg-white shadow p-4">
+        <div className="rounded-xl bg-white shadow p-4">
           <div className="flex items-start justify-between">
             <p className="text-sm font-semibold text-gray-800">총 투자 금액</p>
           </div>
 
           <div className="mt-2 flex items-baseline justify-between">
             <div>
-              <span className="text-2xl font-extrabold tracking-tight">
+              <span className="text-xl font-extrabold tracking-tight">
                 {totalInvestUSDT.toLocaleString()}
               </span>
               <span className="ml-1 text-sm font-semibold text-gray-500">USDT</span>
             </div>
             <div>
-              <span className="text-2xl font-extrabold tracking-tight text-gray-800">
+              <span className="text-xl font-extrabold tracking-tight text-gray-800">
                 ₩ {totalInvestKRW.toLocaleString()}
               </span>
             </div>
@@ -282,37 +282,56 @@ export default function HomePage() {
         <TodayMoneyCard refCode={refCode} payoutTimeNote="매일 10:00 KST 전" />
       </div>
 
-      {/* 보유 자산 */}
-      <div className="max-w-[500px] mx-auto px-3 pt-2">
-        <section className="bg-gradient-to-r from-cyan-400 to-indigo-400 text-white rounded-2xl p-5 shadow-lg">
-          <div className="text-sm font-semibold mb-1">보유 자산</div>
-          <div className="text-3xl font-bold mb-5 tracking-wide flex items-center gap-1">
-            {usdtBalance} <span className="text-lg font-semibold">USDT</span>
-          </div>
-          <div className="flex justify-between text-sm font-semibold gap-2">
-            <button
-              type="button"
-              onClick={handleFundingClick}
-              className="flex-1 bg-white text-cyan-700 rounded-full px-4 py-2 shadow-md border border-cyan-200 font-bold"
-            >
-              보충
-            </button>
-            <button
-              type="button"
-              onClick={goSwap}
-              className="flex-1 bg-white text-cyan-600 rounded-full px-4 py-2 shadow-md border border-cyan-200"
-            >
-              현금교환
-            </button>
-          </div>
-        </section>
+{/* 보유 자산 */}
+<div className="max-w-[500px] mx-auto px-3 pt-2">
+  <section className="bg-gradient-to-r from-cyan-400 to-indigo-400 text-white rounded-2xl p-5 shadow-lg">
+    <div className="text-sm font-semibold mb-2">보유 자산</div>
+
+    {/* ① USDT + KRW 한 줄로 표시 */}
+    <div className="flex items-end justify-between gap-3 mb-5">
+      {/* 좌: USDT */}
+      <div className="flex items-baseline gap-2 whitespace-nowrap">
+        <span className="text-xl font-bold tracking-wide">
+          {Number(usdtBalance).toLocaleString("ko-KR", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </span>
+        <span className="text-sm font-semibold">USDT</span>
       </div>
+
+      {/* 우: KRW */}
+      <div className="text-xl font-semibold opacity-95 whitespace-nowrap">
+        ₩ {(Number(usdtBalance) * 1500).toLocaleString("ko-KR")}
+      </div>
+    </div>
+
+    {/* ② 버튼 2개 */}
+    <div className="flex justify-between text-sm font-semibold gap-2">
+      <button
+        type="button"
+        onClick={handleFundingClick}
+        className="flex-1 bg-white text-cyan-700 rounded-full px-4 py-2 shadow-md border border-cyan-200 font-bold"
+      >
+        보충
+      </button>
+      <button
+        type="button"
+        onClick={goSwap}
+        className="flex-1 bg-white text-cyan-600 rounded-full px-4 py-2 shadow-md border border-cyan-200"
+      >
+        현금교환
+      </button>
+    </div>
+  </section>
+</div>
+
 
       {/* 보유자산 이력 보기 토글 */}
       <div className="max-w-[500px] mx-auto px-3 mt-3">
-        <div className="rounded-2xl bg-white shadow p-4">
+        <div className="rounded-xl bg-white shadow p-4">
           <div className="flex items-center justify-between">
-            <p className="text-xl font-bold">보유자산 이력 보기</p>
+            <p className="text-lg font-bold">보유자산 이력 보기</p>
             <button
               onClick={toggleHistory}
               className="px-4 py-2 rounded-full bg-gradient-to-r from-sky-400 to-indigo-400 text-white shadow"
