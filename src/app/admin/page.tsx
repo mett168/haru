@@ -118,11 +118,11 @@ export default function AdminPayoutsPage() {
         if (failures.length > 0) {
           const first = failures[0];
           const msg =
-            `송금(원장/히스토리 기록) 완료: ${success}/${total}건\n` +
+            `송금(보유자산 원장 적립) 완료: ${success}/${total}건\n` +
             `실패 ${failures.length}건 → 첫 건: ${first?.ref_code || "-"} / ${first?.reason || ""}`;
           alert(msg);
         } else {
-          alert(`송금(보유자산 적립) 완료: ${success}/${total}건`);
+          alert(`송금(보유자산 원장 적립) 완료: ${success}/${total}건`);
         }
 
         await fetchData(); // 상태 갱신
@@ -177,12 +177,12 @@ export default function AdminPayoutsPage() {
         >
           지급 실행
         </button>
-        {/* ✅ 송금 버튼 (asset_ledger + asset_history 기록) */}
+        {/* ✅ 송금 버튼 (asset_ledger 기록만 진행) */}
         <button
           onClick={runDeposit}
           disabled={loading}
           className="px-3 py-1 bg-emerald-600 text-white rounded"
-          title="해당 날짜 지급 합계를 보유자산에 적립"
+          title="해당 날짜 지급 합계를 보유자산 원장(asset_ledger)에 적립"
         >
           송금
         </button>

@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import { supabase } from "@/lib/supabaseClient";
 import { getKSTDateString, getKSTISOString } from "@/lib/dateUtil";
-import { addCashWithdraw } from "@/lib/assetHistory"; // ✅ 추가
 
 export default function SwapClient() {
   const router = useRouter();
@@ -42,7 +41,7 @@ export default function SwapClient() {
       const { data: user, error: uerr } = await supabase
         .from("users")
         .select("ref_code, wallet_address")
-        .ilike("wallet_address", account.address)
+        .eq("wallet_address", account.address.toLowerCase())
         .maybeSingle();
       if (uerr) throw uerr;
       if (!user?.ref_code) throw new Error("ref_code를 찾을 수 없습니다.");
@@ -80,13 +79,6 @@ export default function SwapClient() {
           { onConflict: "ref_code,transfer_date,reason" }
         );
       if (upErr) throw upErr;
-
-      // ✅ 3) 보유자산 이력 추가 (asset_history)
-      await addCashWithdraw({
-        ref_code: user.ref_code,
-        amount: amt,
-        memo: "현금교환 출금",
-      });
 
       // 완료 페이지 이동
       router.push("/home/swap/complete");

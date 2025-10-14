@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useActiveAccount } from "thirdweb/react";
 import BottomNav from "@/components/BottomNav";
 import { supabase } from "@/lib/supabaseClient";
-import { ChevronLeft } from "lucide-react"; // ← 아이콘 추가
+import { ChevronLeft } from "lucide-react";
 
 export default function MyPage() {
   const account = useActiveAccount();
@@ -16,7 +16,7 @@ export default function MyPage() {
   const [nameInput, setNameInput] = useState("");
   const [phoneInput, setPhoneInput] = useState("");
 
-  // ✅ 본사 계좌 모달 상태
+  // 본사 계좌 모달
   const [showCompanyAcc, setShowCompanyAcc] = useState(false);
 
   useEffect(() => {
@@ -41,10 +41,7 @@ export default function MyPage() {
         refName = refUser?.name || null;
       }
 
-      setUserData({
-        ...user,
-        ref_by_name: refName,
-      });
+      setUserData({ ...user, ref_by_name: refName });
     };
 
     fetchUserData();
@@ -74,10 +71,9 @@ export default function MyPage() {
     <>
       <main className="min-h-screen bg-[#f5f7fa] pb-16 w-full">
         <div className="px-4 pt-2 max-w-[500px] mx-auto">
-          {/* 계정관리 */}
+          {/* 헤더 */}
           <section className="mb-2">
             <div className="flex items-center mb-1 pl-2">
-              {/* 돌아가기 버튼 */}
               <button
                 onClick={() => router.push("/haru")}
                 className="mr-2 text-gray-600 hover:text-gray-900"
@@ -102,7 +98,6 @@ export default function MyPage() {
                     .from("users")
                     .update({ name: nameInput })
                     .eq("wallet_address", account.address.toLowerCase());
-
                   if (!error) {
                     setEditingField(null);
                     setUserData({ ...userData, name: nameInput });
@@ -112,7 +107,7 @@ export default function MyPage() {
                 onInputChange={setNameInput}
               />
 
-              {/* 휴대폰 번호 */}
+              {/* 휴대폰 */}
               <InfoItem
                 label="휴대폰 번호"
                 value={userData?.phone}
@@ -126,7 +121,6 @@ export default function MyPage() {
                     .from("users")
                     .update({ phone: phoneInput })
                     .eq("wallet_address", account.address.toLowerCase());
-
                   if (!error) {
                     setEditingField(null);
                     setUserData({ ...userData, phone: phoneInput });
@@ -160,8 +154,9 @@ export default function MyPage() {
             </div>
           </section>
 
-          {/* ✅ 계좌 등록 */}
+          {/* 계정/문서 섹션 */}
           <section className="mb-2">
+            {/* 계좌 등록 */}
             <div
               onClick={() => router.push("/settings/bank")}
               className="cursor-pointer bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
@@ -170,12 +165,21 @@ export default function MyPage() {
               <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
             </div>
 
-            {/* ✅ 본사 계좌 (하드코딩) */}
+            {/* 본사 계좌 */}
             <div
               onClick={() => setShowCompanyAcc(true)}
               className="mt-2 cursor-pointer bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
             >
               <span className="text-sm font-medium">본사 계좌</span>
+              <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
+            </div>
+
+            {/* ✅ 차용증: 새 페이지로 이동 (보기만) */}
+            <div
+              onClick={() => router.push("/mypage/borrow-docs")}
+              className="mt-2 cursor-pointer bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
+            >
+              <span className="text-sm font-medium">차용증</span>
               <img src="/icon-go.png" alt="이동" className="w-4 h-4" />
             </div>
           </section>
@@ -184,7 +188,6 @@ export default function MyPage() {
           <section className="mb-2">
             <h2 className="text-md font-semibold text-gray-700 mb-1 pl-2">내역관리</h2>
             <div className="bg-white rounded-xl shadow border text-sm divide-y divide-gray-200">
-              {/* 💱 현금 교환 내역 */}
               <button
                 onClick={() => router.push("/mypage/history/cash-exchange")}
                 className="w-full px-4 py-3 hover:bg-gray-50 flex justify-between items-center"
@@ -195,21 +198,6 @@ export default function MyPage() {
             </div>
           </section>
 
-          {/* 문의 */}
-          <section className="space-y-4 mb-2">
-            <a
-              href="http://pf.kakao.com/_rxaxmGn/chat"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block bg-white p-4 rounded-xl shadow flex justify-between items-center hover:bg-gray-50"
-            >
-              <div className="flex items-center space-x-2">
-                <img src="/icon-question.png" alt="문의" className="w-5 h-5" />
-                <span className="text-sm">1:1 문의하기</span>
-              </div>
-              <img src="/icon-link.png" alt="이동" className="w-4 h-4" />
-            </a>
-          </section>
 
           {/* 로그아웃 */}
           <button
@@ -220,7 +208,7 @@ export default function MyPage() {
           </button>
         </div>
 
-        {/* ✅ 본사 계좌 모달 */}
+        {/* 본사 계좌 모달 */}
         <CompanyAccountModal
           open={showCompanyAcc}
           onClose={() => setShowCompanyAcc(false)}
@@ -232,7 +220,6 @@ export default function MyPage() {
   );
 }
 
-// ✅ 재사용 가능한 인라인 수정 컴포넌트
 function InfoItem({
   label,
   value,
@@ -277,9 +264,7 @@ function InfoItem({
   );
 }
 
-/* =========================
-   ✅ 본사 계좌 모달 (하드코딩)
-   ========================= */
+/* ============ 본사 계좌 모달 ============ */
 function CompanyAccountModal({
   open,
   onClose,
@@ -289,7 +274,6 @@ function CompanyAccountModal({
 }) {
   if (!open) return null;
 
-  // 하드코딩된 본사 계좌
   const bankName = "기업은행";
   const accountNumber = "137-104541-01-019";
   const holderName = "CUICHENGXUN";
@@ -305,21 +289,9 @@ function CompanyAccountModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center">
-      {/* 딤(배경) */}
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-
-      {/* 모달 패널 */}
       <div
-        className="
-          relative w-[calc(100%-32px)] max-w-[500px] mx-auto
-          bg-white rounded-t-2xl sm:rounded-2xl shadow-lg
-
-          /* ▼ 핵심: 높이 제한 + 스크롤 */
-          max-h-[75vh] overflow-y-auto overscroll-contain
-
-          /* ▼ 하단 네비/안전영역에 가리지 않도록 패딩 */
-          p-5 pb-[calc(env(safe-area-inset-bottom,0px)+88px)]
-        "
+        className="relative w-[calc(100%-32px)] max-w-[500px] mx-auto bg-white rounded-t-2xl sm:rounded-2xl shadow-lg max-h-[75vh] overflow-y-auto overscroll-contain p-5 pb-[calc(env(safe-area-inset-bottom,0px)+88px)]"
       >
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold">본사 계좌</h3>
@@ -331,10 +303,7 @@ function CompanyAccountModal({
         <div className="rounded-xl border border-gray-200 p-4 bg-gray-50">
           <div className="flex items-start justify-between gap-3">
             <span className="text-sm font-semibold text-gray-800">{bankName}</span>
-            <button
-              onClick={handleCopy}
-              className="text-xs text-blue-600 hover:underline shrink-0"
-            >
+            <button onClick={handleCopy} className="text-xs text-blue-600 hover:underline shrink-0">
               복사하기
             </button>
           </div>

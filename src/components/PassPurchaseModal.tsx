@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useActiveAccount } from "thirdweb/react";
 import { supabase } from "@/lib/supabaseClient";
 import { getKSTISOString, getKSTDateString } from "@/lib/dateUtil";
-import { addReinvestWithdraw } from "@/lib/assetHistory"; // ✅ 추가
 
 /* --------------------------- 성공 모달 --------------------------- */
 function TopupSuccessModal({
@@ -102,7 +101,7 @@ export default function PassPurchaseModal({
     return getKSTDateString(maturity);
   }, []);
 
-  // ✅ 보충 처리 함수
+  // ✅ 보충 처리 함수 (asset_history 사용 안 함)
   const handleTopup = async () => {
     if (!account?.address) {
       alert("지갑이 연결되지 않았습니다.");
@@ -119,7 +118,7 @@ export default function PassPurchaseModal({
       const { data: user, error: userError } = await supabase
         .from("users")
         .select("ref_code, name, wallet_address")
-        .ilike("wallet_address", account.address)
+        .eq("wallet_address", account.address.toLowerCase())
         .maybeSingle();
       if (userError) throw userError;
       if (!user?.ref_code) throw new Error("내 초대코드(ref_code)를 찾을 수 없습니다.");
@@ -180,12 +179,7 @@ export default function PassPurchaseModal({
         );
       if (upErr) throw upErr;
 
-      // ✅ 4️⃣ 보유자산 이력 추가 (asset_history)
-      await addReinvestWithdraw({
-        ref_code: user.ref_code,
-        amount: totalPrice,
-        memo: "보충 출금(재투자)",
-      });
+      // (삭제됨) 4️⃣ 보유자산 이력 추가 (asset_history) 사용 안 함
 
       // 성공 모달 표시 및 상위 새로고침
       setShowSuccessModal(true);
