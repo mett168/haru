@@ -22,7 +22,22 @@ export default function AdminPayoutsPage() {
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<{ repay: number; interest: number; total: number } | null>(null);
 
-  // --- 데이터 조회 (GET /api/admin/payouts?date=...)
+  // ====== 수동 입금 모달 상태 ======
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualRefCode, setManualRefCode] = useState("");
+  const [manualAmount, setManualAmount] = useState<string>("");
+  const [manualMemo, setManualMemo] = useState("");
+  const [manualMsg, setManualMsg] = useState<string | null>(null);
+  const [manualBusy, setManualBusy] = useState(false);
+
+  const resetManual = () => {
+    setManualRefCode("");
+    setManualAmount("");
+    setManualMemo("");
+    setManualMsg(null);
+  };
+
+  // --- 데이터 조회
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -72,7 +87,7 @@ export default function AdminPayoutsPage() {
     }
   };
 
-  // --- 지급 실행 (commit=true → payout_transfers 저장)
+  // --- 지급 실행 (commit=true)
   const runExecute = async () => {
     setLoading(true);
     try {
@@ -95,8 +110,7 @@ export default function AdminPayoutsPage() {
     }
   };
 
-  // --- 송금(보유자산 원장 적립) : /api/admin/payouts/deposit
-  //     API 응답: { ok, date, totalTargets, successCount, results: [{ref_code, amount, ok, reason?}, ...] }
+  // --- 송금(보유자산 적립)
   const runDeposit = async () => {
     if (!date) return alert("날짜를 선택하세요.");
     setLoading(true);
@@ -104,7 +118,7 @@ export default function AdminPayoutsPage() {
       const res = await fetch(`/api/admin/payouts/deposit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date }), // 필요 시 { date, settleOnly: true }
+        body: JSON.stringify({ date })
       });
       const json = await res.json();
 
@@ -118,14 +132,14 @@ export default function AdminPayoutsPage() {
         if (failures.length > 0) {
           const first = failures[0];
           const msg =
-            `송금(보유자산 원장 적립) 완료: ${success}/${total}건\n` +
+            `송금(보유자산 적립) 완료: ${success}/${total}건\n` +
             `실패 ${failures.length}건 → 첫 건: ${first?.ref_code || "-"} / ${first?.reason || ""}`;
           alert(msg);
         } else {
-          alert(`송금(보유자산 원장 적립) 완료: ${success}/${total}건`);
+          alert(`송금(보유자산 적립) 완료: ${success}/${total}건`);
         }
 
-        await fetchData(); // 상태 갱신
+        await fetchData();
       } else {
         alert(json.error || "송금(적립) 에러");
       }
@@ -133,6 +147,37 @@ export default function AdminPayoutsPage() {
       alert(e?.message || "네트워크 오류");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // --- 수동 입금 실행
+  const runManualDeposit = async () => {
+    setManualMsg(null);
+    const amt = Number(manualAmount);
+    if (!manualRefCode || !amt || !isFinite(amt) || amt <= 0) {
+      setManualMsg("코드와 양수 금액을 입력하세요.");
+      return;
+    }
+    setManualBusy(true);
+    try {
+      const res = await fetch(`/api/admin/payouts/manual-deposit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ref_code: manualRefCode.trim(), amount: amt, memo: manualMemo }),
+      });
+      const json = await res.json();
+      if (res.ok && json?.ok) {
+        setManualMsg("수동 입금 완료!");
+        await fetchData();
+        resetManual();
+        setManualOpen(false);
+      } else {
+        setManualMsg(json?.error || "수동 입금 실패");
+      }
+    } catch (e: any) {
+      setManualMsg(e?.message || "네트워크 오류");
+    } finally {
+      setManualBusy(false);
     }
   };
 
@@ -145,7 +190,7 @@ export default function AdminPayoutsPage() {
     <div className="max-w-[960px] mx-auto p-4 space-y-4">
       <h1 className="text-xl font-semibold">지급 관리</h1>
 
-      {/* 날짜 선택 + 버튼들 */}
+      {/* 날짜 + 버튼들 */}
       <div className="flex flex-wrap gap-2 items-center">
         <input
           type="date"
@@ -153,42 +198,29 @@ export default function AdminPayoutsPage() {
           onChange={(e) => setDate(e.target.value)}
           className="border rounded px-2 py-1"
         />
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="px-3 py-1 border rounded"
-          title="해당 날짜의 저장된 지급 데이터 조회"
-        >
+        <button onClick={fetchData} disabled={loading} className="px-3 py-1 border rounded">
           조회
         </button>
-        <button
-          onClick={runCalc}
-          disabled={loading}
-          className="px-3 py-1 bg-yellow-500 text-white rounded"
-          title="미리보기(저장 안 함)"
-        >
+        <button onClick={runCalc} disabled={loading} className="px-3 py-1 bg-yellow-500 text-white rounded">
           지급 계산
         </button>
-        <button
-          onClick={runExecute}
-          disabled={loading}
-          className="px-3 py-1 bg-blue-600 text-white rounded"
-          title="payout_transfers 저장"
-        >
+        <button onClick={runExecute} disabled={loading} className="px-3 py-1 bg-blue-600 text-white rounded">
           지급 실행
         </button>
-        {/* ✅ 송금 버튼 (asset_ledger 기록만 진행) */}
-        <button
-          onClick={runDeposit}
-          disabled={loading}
-          className="px-3 py-1 bg-emerald-600 text-white rounded"
-          title="해당 날짜 지급 합계를 보유자산 원장(asset_ledger)에 적립"
-        >
+        <button onClick={runDeposit} disabled={loading} className="px-3 py-1 bg-emerald-600 text-white rounded">
           송금
+        </button>
+        <button
+          onClick={() => setManualOpen(true)}
+          disabled={loading}
+          className="px-3 py-1 bg-gray-700 text-white rounded"
+          title="누락 보정: 특정 코드에 수동 입금"
+        >
+          수동 입금
         </button>
       </div>
 
-      {/* 합계 박스 */}
+      {/* 합계 */}
       {summary && (
         <div className="bg-gray-50 border rounded p-3 text-sm">
           <p>오늘 원금 상환 합계: {summary.repay.toLocaleString()}</p>
@@ -217,9 +249,7 @@ export default function AdminPayoutsPage() {
                 <td className="border px-2 py-1">{r.user_name || "-"}</td>
                 <td className="border px-2 py-1">{Number(r.today_repay ?? 0).toLocaleString()}</td>
                 <td className="border px-2 py-1">{Number(r.today_interest ?? 0).toLocaleString()}</td>
-                <td className="border px-2 py-1 font-semibold">
-                  {Number(r.total_amount ?? 0).toLocaleString()}
-                </td>
+                <td className="border px-2 py-1 font-semibold">{Number(r.total_amount ?? 0).toLocaleString()}</td>
                 <td className="border px-2 py-1">{r.status}</td>
               </tr>
             ))}
@@ -233,6 +263,59 @@ export default function AdminPayoutsPage() {
           </tbody>
         </table>
       </div>
+
+      {/* 수동 입금 모달 */}
+      {manualOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="w-[420px] rounded-2xl bg-white p-6 shadow-xl">
+            <div className="mb-3 text-lg font-semibold">수동 입금 (누락 보정)</div>
+
+            <label className="mb-1 block text-sm text-gray-600">코드 (ref_code)</label>
+            <input
+              value={manualRefCode}
+              onChange={(e) => setManualRefCode(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
+              placeholder="예: HM1001"
+            />
+
+            <label className="mb-1 block text-sm text-gray-600">금액 (USDT)</label>
+            <input
+              value={manualAmount}
+              onChange={(e) => setManualAmount(e.target.value)}
+              className="mb-3 w-full rounded border px-3 py-2"
+              placeholder="예: 25.5"
+              inputMode="decimal"
+            />
+
+            <label className="mb-1 block text-sm text-gray-600">메모 (선택)</label>
+            <input
+              value={manualMemo}
+              onChange={(e) => setManualMemo(e.target.value)}
+              className="mb-4 w-full rounded border px-3 py-2"
+              placeholder="예: 누락 보정"
+            />
+
+            {manualMsg && <div className="mb-3 text-sm text-emerald-700">{manualMsg}</div>}
+
+            <div className="flex justify-end gap-2">
+              <button
+                className="rounded px-3 py-2 text-gray-600 hover:bg-gray-100"
+                onClick={() => { resetManual(); setManualOpen(false); }}
+                disabled={manualBusy}
+              >
+                닫기
+              </button>
+              <button
+                onClick={runManualDeposit}
+                disabled={manualBusy}
+                className="rounded bg-gray-800 px-4 py-2 text-white hover:bg-gray-900 disabled:opacity-60"
+              >
+                {manualBusy ? "처리 중..." : "입금"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

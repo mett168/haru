@@ -1,14 +1,10 @@
 {
   "crons": [
-    {
-      "path": "/api/snapshot",
-      "schedule": "0 16 * * *"  
-    },
-    {
-      "path": "/api/send-rewards",
-      "schedule": "0 17 * * *"   
-    }
+    { "path": "/api/cron/rewards-calc",     "schedule": "30 16 * * *" },
+    { "path": "/api/cron/rewards-transfer", "schedule": "0 17 * * *"  },
+    { "path": "/api/cron/payouts-deposit",  "schedule": "0 1 * * *"   }
   ]
 }
+
 
 
